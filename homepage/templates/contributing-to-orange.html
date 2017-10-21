@@ -1,17 +1,24 @@
 {% extends "base.html" %}
 
+{% block title %}Contributing{% endblock title %}
+
 {% block content %}
 <section id="features" class="features section custom-reduce-padding-2">
     <div class="container">
         <div class="row">
             <div class="col-md-12 col-sm-12 col-xs-12">
-                {% if post == 1 %}
+                {% if post > 0 %}
                     <div class="alert alert-success custom-alert text-center fade in">
                         <strong>Success!</strong> Thank you for your contribution.&nbsp;&nbsp;&nbsp;<button type="button" class="close" data-dismiss="alert">&times;</button>
                     </div>
-                {% elif post == -1 %}
+                {% elif post < 0 %}
                     <div class="alert alert-danger custom-alert text-center fade in">
-                        <strong>Error!</strong> Please electronically sign and re-submit the form below.&nbsp;&nbsp;&nbsp;<button type="button" class="close" data-dismiss="alert">&times;</button>
+                        <strong>Error!</strong>&nbsp;
+                        {% if post == -2%}
+                            Wrong captcha. Please try again.
+                        {% else %}
+                            Please electronically sign and re-submit the form below.&nbsp;&nbsp;&nbsp;<button type="button" class="close" data-dismiss="alert">&times;</button>
+                        {% endif %}
                     </div>
                 {% endif %}
                 <h1 class="title">Contributing to Orange</h1>
@@ -19,7 +26,7 @@
                     <p>Thank you for contributing code to the Orange project! Like many open source projects, we need a contributor license agreement from you before we can merge in your changes. You only need to fill out this agreement once.</p>
                     <p>In brief, by asking us to merge your code into the Orange project, you are assigning us the perpetual right to use that code in any way we like, including providing it to others. You are also certifying that you wrote the code, and that you are allowed to assign it to us. You are not giving up any copyright: your code is still yours, and you can do whatever you want with it.</p>
                     <p>Contributor License Agreements are important because they define the chain of ownership of a piece of software. Some companies won't allow the use of free software without clear agreements around code ownership. That's why many open source projects collect similar agreements from contributors.</p>
-                    <p>Please read this document carefully before signing and keep a copy for your records. If you have questions about these terms, please contact us at info@orange.si.</p>
+                    <p>Please read this document carefully before signing and keep a copy for your records. If you have questions about these terms, please contact us at info@biolab.si.</p>
 
                     <h2 class="custom-margin">Contributor License Agreement ("CLA")</h2>
                     <p>This CLA applies to any contribution that "you", the person identified below, make to the Orange open source software project ("project") managed by Bioinformatics Laboratory at University of Ljubljana ("us" or "Orange"), and sets out the intellectual property rights you grant to us in such contribution. This CLA is for your protection as well as protection of Orange and its licensees; it does not change your rights to use your own contributions for any other purpose. If you agree to be bound by these terms, sign this page electronically with the form below.</p>
@@ -44,12 +51,12 @@
                     </li></ol>
 
                     <h2 class="custom-margin">Submitting CLA by email, fax, or paper</h2>
-                    <p>You may email a signed PDF of this document to <span class="fa fa-envelope-o"></span> <a class="mail-link" href="mailto:info@orange.si">info@orange.si</a>, or send this document by facsimile to (+386 1) 426 4647, or send us an original signed CLA to:</p>
+                    <p>You may email a signed PDF of this document to <span class="fa fa-envelope-o"></span> <a class="mail-link" href="mailto:info@biolab.si">info@biolab.si</a>, or send this document by facsimile to (+386 1) 2419 350, or send us an original signed CLA to:</p>
                     <div class="license-forms">
                         <p class="print-label">
                         Bioinformatics Laboratory<br>
                         Faculty of Computer and Information Science<br>
-                        Trzaska 25<br>
+                        Vecna pot 113<br>
                         1000 Ljubljana<br>
                         Slovenia<br>
                         </p>
@@ -74,10 +81,10 @@
                         <p>Alternatively to sending by postal mail, email, or fax, you may also choose to sign the form electronically:</p>
                         <br>
 
-                        <form role="form" class="form-horizontal" action="{% url "contribute" %}" method="post" name="license-form">
+                        <form role="form" class="form-horizontal" action="{% url 'contribute' %}" method="post" name="license-form">
                             {% csrf_token %}
                             <div class="form-group">
-                                <label class="col-md-2 col-sm-3 col-xs-10" for="fullname" class="span4">Full Name:</label>
+                                <label class="col-md-2 col-sm-3 col-xs-10 span4" for="fullname">Full Name:</label>
                                 <div class="inline-label-input col-md-4 col-sm-4 col-xs-10">
                                     <input class="form-control" type="text" id="fullname" name="Full Name" required>
                                 </div>
@@ -113,7 +120,12 @@
                                 </div>
                             </div>
                             <div class="form-group">
-                                <div class="col-md-offset-2 col-md-10 col-sm-offset-3 col-sm-9" class="col-sm-4 col-md-4">
+                                <div class="col-md-offset-2 col-md-10 col-sm-offset-3 col-sm-9">
+                                    <div class="g-recaptcha" data-sitekey="6Lemwf4SAAAAACdTLL0TYpvYQ9LE91r6r_i7Yg2a"></div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="col-md-offset-2 col-md-10 col-sm-offset-3 col-sm-9">
                                     <button type="submit" class="btn btn-theme" value="Submit">Submit</button>
                                 </div>
                             </div>

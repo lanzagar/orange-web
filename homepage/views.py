@@ -1,52 +1,38 @@
-import xml.dom.minidom
 import random
-import re
+import requests
+import json
 
 from django.conf import settings
 from django.shortcuts import render
 from django.core.mail import send_mail
 
-# Create a list of admin e-mail addresses.
-admins = [x[1] for x in settings.ADMINS]
-
-f = open(settings.SCREENSHOTS_INDEX)
-doc = xml.dom.minidom.parse(f)
-f.close()
-
-screenshots = []
-for node in doc.getElementsByTagName('screenshot'):
-    iid = node.getAttribute('id')
-    screenshot = {
-        'id': iid,
-        'title': node.getAttribute('title'),
-        'hide': node.getAttribute('hide'),
-        'img': node.getAttribute('img')
-        or ('homepage/screenshots/snp-%s.png' % iid),
-        'rank': int(node.getAttribute('rank') or 999),
-        'thumb': node.getAttribute('thumb')
-        or ('homepage/screenshots/tbn-%s.png' % iid),
-        'features': node.getAttribute('features'),
-    }
-    if not screenshot['hide'] == 'yes':
-        screenshots.append(screenshot)
+from orange_web.resources import FEATURE_DESCRIPTIONS
+from orange_web.resources import SCREENSHOTS
+from orange_web.resources import WIDGET_JS
+from orange_web.resources import WIDG_JS
+from orange_web.resources import LICENSE
+from orange_web.resources import ADMINS
+from orange_web.resources import TESTIMONIALS
 
 
 def screens(request):
     """Sort screenshots by their rank"""
-    screenshots.sort(key=lambda x: x['rank'])
-    return render(request, 'screenshots.html', {'screenshots': screenshots})
+    SCREENSHOTS.sort(key=lambda a: a['rank'])
+    return render(request, 'screenshots.html', {'screenshots': SCREENSHOTS})
 
 
-fl = open(settings.LICENSE_FILE)
-license_file = fl.readlines()
-fl.close()
+def toolbox(request):
+    return render(request, 'toolbox.html', {
+        'toolbox': WIDGET_JS,
+        'toolbox_strings': json.dumps(WIDG_JS),
+    })
 
 
-def license(request):
-    text = ""
+def license_page(request):
+    text = ''
     in_other = False
     other = []
-    for l in license_file:
+    for l in LICENSE:
         if l.startswith('----'):
             in_other = not in_other
             if in_other:
@@ -64,95 +50,88 @@ def license(request):
     return render(request, 'license.html', context)
 
 
+def pass_captcha(request):
+    url = 'https://www.google.com/recaptcha/api/siteverify'
+    params = {
+        'secret': settings.RECAPTCHA_SECRET,
+        'response': request.POST.get('g-recaptcha-response')
+    }
+    r = requests.get(url, params=params, timeout=10)
+    return json.loads(r.content).get('success')
+
+
 def contribute(request):
-    response = {"post": None}
-    if request.method == 'POST' and request.POST['Signature'] == "I AGREE":
-        message = "This message was sent to you automatically from orange.biolab.si.\n\n" + \
-                  request.POST['Full Name'] + " electronically signed Orange Contributor " \
-                  "License Agreement. Below are his/her contact information:" \
-                  "\n\nFull Name: " + request.POST['Full Name'] + \
-                  "\nE-mail: " + request.POST['E-mail'] + \
-                  "\nMailing Address: \n\n" + request.POST['Address'] + \
-                  "\n\nCountry: " + request.POST['Country'] + \
-                  "\nTelephone Number: " + request.POST['Number'] + \
-                  "\n\nThe user has confirmed this action by typing " \
-                  "\"I AGREE\" in the appropriate Electronic Signature form field." \
-                  "\n\nGood day,\nBiolab Webmaster"
-        send_mail('Orange Contributor License Agreement Receipt', message,
-                  request.POST['E-mail'], admins, fail_silently=False)
-        response = {"post": 1}
-    elif request.method == 'POST' and request.POST['Signature'] != "I AGREE":
-        response = {"post": -1}
+    response = {
+        'post': 0,
+        'recaptcha': True,
+    }
+    if request.method == 'POST':
+        rp = request.POST
+        if not pass_captcha(request):
+            response['post'] = -2
+        elif rp.get('Signature') != 'I AGREE':
+            response['post'] = -1
+        else:
+            message = ('This message was sent to you automatically from '
+                       'orange.biolab.si.\n\n{0} electronically signed '
+                       'Orange Contributor License Agreement. Below are '
+                       'his/her contact information:\n\nFull Name: {0}\n'
+                       'E-mail: {1}\nMailing Address: \n\n{2}\n\nCountry: {3}'
+                       '\nTelephone Number: {4}\n\nThe user has confirmed '
+                       'this action by typing "I AGREE" in the appropriate '
+                       'Electronic Signature form field.\n\nGood day,\n'
+                       'Biolab Webmaster').format(rp.get('Full Name'),
+                                                  rp.get('E-mail'),
+                                                  rp.get('Address'),
+                                                  rp.get('Country'),
+                                                  rp.get('Number'))
+            send_mail('Orange Contributor License Agreement Receipt', message,
+                      rp.get('E-mail'), ADMINS, fail_silently=True)
+            response['post'] = 1
     return render(request, 'contributing-to-orange.html', response)
 
 
 def contact(request):
-    response = {"post": False}
+    response = {
+        'post': 0,
+        'recaptcha': True,
+    }
     if request.method == 'POST':
-        message = "This message was sent to you automatically from orange.biolab.si.\n\n" + \
-                  "A Contact form was submitted. Below are the details:" \
-                  "\n\nE-mail: " + request.POST['E-mail'] + \
-                  "\nSubject: " + request.POST['Subject'] + \
-                  "\nMessage: \n\n" + request.POST['Message'] + \
-                  "\n\nGood day,\nBiolab Webmaster"
-        send_mail('Orange Contact Request', message,
-                  request.POST['E-mail'], admins, fail_silently=False)
-        response = {"post": True}
+        rp = request.POST
+        if pass_captcha(request):
+            message = (u'This message was sent to you automatically from '
+                       'orange.biolab.si.\n\nA visitor submitted the contact '
+                       'form. Below are the details:\n\nE-mail: {0}\nSubject: '
+                       '{1}\nMessage:\n\n{2}\n\nGood day,\n'
+                       'Biolab Webmaster').format(rp.get('E-mail'),
+                                                  rp.get('Subject'),
+                                                  rp.get('Message'))
+            send_mail('Orange Contact Request', message,
+                      rp.get('E-mail'), ADMINS, fail_silently=True)
+            response['post'] = 1
+        else:
+            response['post'] = -1
     return render(request, 'contact.html', response)
-
-# If we ever want to offer 64-bit versions of Orange
-# and wish to discern users by 32/64-bit OS builds.
-# def detect_os(user_agent):
-#     os = {
-#         'type': None,
-#         '64b': True
-#     }
-#     if re.match(r'.*[Ww]in.*', user_agent):
-#         os['type'] = "windows"
-#         if re.match(r'^.*(WOW64|x86_64|Win64).*', user_agent):
-#             os['64b'] = True
-#     elif re.match(r'^(?!.*(iPhone|iPad)).*[Mm]ac.*', user_agent):
-#         os['type'] = "mac-os-x"
-#         if re.match(r'^.*(10_[89]|1[12]_[0-9]).*', user_agent):
-#             os['64b'] = True
-#     elif re.match(r'.*[Ll]inux.*', user_agent):
-#         os['type'] = "linux"
-#     else:
-#         os['type'] = ""
-
-p_win = re.compile(r'.*[Ww]in.*')
-p_mac = re.compile(r'^(?!.*(iPhone|iPad)).*[Mm]ac.*')
-p_linux = re.compile(r'.*[Ll]inux.*')
-
-
-def detect_os(user_agent):
-    if re.match(p_win, user_agent):
-        return "windows"
-    elif re.match(p_mac, user_agent):
-        return "mac-os-x"
-    elif re.match(p_linux, user_agent):
-        return "linux"
-    else:
-        return ""
 
 
 def index(request):
     response = {
-        'random_screenshots': random.sample(screenshots, 5),
-        'os': detect_os(request.META['HTTP_USER_AGENT'])
+        'random_screenshots': random.sample(SCREENSHOTS, 5),
+        'features': FEATURE_DESCRIPTIONS,
+        'testimonials': TESTIMONIALS[:3],
+        'override_home': {
+            'name': 'Features',
+            'url': '#Orange-Features',
+        },
     }
     return render(request, 'homepage.html', response)
-
-
-def download(request, os=None):
-    os_response = {'os': None}
-    if os is None:
-        os_response['os'] = detect_os(request.META['HTTP_USER_AGENT'])
-    else:
-        os_response['os'] = os
-    return render(request, 'download.html', os_response)
 
 
 def start(request):
     return render(request, 'start.html',
                   {'screens_root': 'homepage/getting_started'})
+
+
+def privacy(request):
+    return render(request, 'privacy_policy.html', {})
+

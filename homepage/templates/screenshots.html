@@ -1,20 +1,22 @@
 {% extends "base.html" %}
 {% load staticfiles %}
 
-{% block content %}
-    <section id="features" class="features section custom-reduce-padding-2">
+{% block title %}Screenshots{% endblock title %}
+
+{% block content-full-width %}
+    <section id="features" class="features section custom-reduce-padding-2 screenshots">
         <div class="container">
             <div class="row">
-                <div class="col-md-12 col-sm-12 col-xs-12">
+                <div class="col-md-12 col-sm-12 col-xs-12 title">
                     <h1 class="title">Screenshots</h1>
                 </div>
                 <div id="visage" class="content imgcontent">
                 {% for screenshot in screenshots %}
-                    <div class="item col-md-3 col-sm-6 col-xs-12 screenshot-container">
+                    <div class="item col-md-4 col-sm-6 col-xs-12 screenshot-container">
                         <div class="content">
                             <div class="screenshot">
-                                <a href="{% static screenshot.img %}" title="{{ screenshot.title }}">
-                                    <img class="hovertitle" alt="{{ screenshot.title }}" src="{% static screenshot.thumb %}">
+                                <a href="{% static screenshot.img %}">
+                                    <img class="screenshot-image" alt="{{ screenshot.title }}" src="{% static screenshot.thumb %}">
                                 </a>
                             </div>
                             <p class="screenshot-title">{{ screenshot.title }}</p>
@@ -25,4 +27,11 @@
             </div>
         </div>
     </section>
-{% endblock content %}
+{% endblock content-full-width %}
+
+{% block readyjavascript %}
+    $('#features').lightGallery({
+        thumbnail: true,
+        selector: 'a:has(img)'
+    });
+{% endblock readyjavascript %}

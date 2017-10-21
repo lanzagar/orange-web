@@ -1,0 +1,17 @@
+<div class="container">
+    <div class="row testimonial-list">
+        {% for testimonial in testimonials %}
+            <div class="content col-md-4 col-sm-12 item">
+                <div class="img-container">
+                    <img src="{{ testimonial.img }}">
+                </div>
+                <h3 class="item-title">
+                    {{ testimonial.title }}<br>
+                    <span class="extra">{{ testimonial.position }}</span><br>
+                    <span class="extra">{{ testimonial.institution }}</span>
+                </h3>
+                <p class="feature-text">"{{ testimonial.text }}"</p>
+            </div>
+        {% endfor %}
+    </div>
+</div>

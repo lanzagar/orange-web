@@ -1,6 +1,11 @@
 """Here we define custom django tags"""
+import logging
+from io import BytesIO
+from os import path
+
 from datetime import datetime as dt
 
+import re
 from django import template
 from django.core.urlresolvers import reverse
 from docutils.core import publish_parts
@@ -8,26 +13,55 @@ from django.conf import settings
 
 import feedparser
 import requests
+# noinspection PyUnresolvedReferences
 from six.moves import xmlrpc_client as xmlrpclib
 
+logger = logging.getLogger(__name__)
 register = template.Library()
 
+post_max_length = 450  # max length of post excerpt lengt
+post_with_image_length = 180  # length of post that contains image
 
-@register.inclusion_tag('feed_results.html')
+
 def grab_feed_all():
     """Grabs an RSS/Atom feed. Django will cache the content."""
-    url = 'http://{0}/?feed=rss2'.format(settings.BLOG_HOST)
-    feed = feedparser.parse(url)
+    rss_feed = 'https://blog.biolab.si/feed/'
+    try:
+      resp = requests.get(rss_feed, timeout=3.0)
+    except requests.ReadTimeout:
+      logger.warn("Timeout when reading RSS %s", rss_feed)
+      return
+
+    # Put it to memory stream object universal feedparser
+    content = BytesIO(resp.content)
+
+    # Parse content
+    feed = feedparser.parse(content)
     if feed.bozo == 0:
         # Parses first 3 entries from remote blog feed.
         entries = []
         for i in range(3):
             pub_date = feed['entries'][i]['published'][:-6]
             df = '%a, %d %b %Y %H:%M:%S'
+            description = feed['entries'][i]['description']
+            image = None
+            # take image from description if exist
+            if '<img' in description:
+                image_from, image_to = description.index('<img'), description.index('/>')
+                image = description[image_from:image_to+2]
+                description = description[image_to + 2:]
+                image = image[image.index('src') + 5:]
+                image = image[:image.index('"')]
+            # shorten a description
+            description = cut_string(
+                description.replace("&#160;", "").replace("[&#8230;]", ""),
+                post_length=post_max_length if image is None else post_with_image_length)
             entry = {
                 'title': feed['entries'][i]['title'],
                 'link': feed['entries'][i]['link'],
+                'description': description,
                 'published': dt.strptime(pub_date, df).strftime('%d %b'),
+                'image': image
             }
             entries.append(entry)
         return {'entries': entries,
@@ -37,115 +71,32 @@ def grab_feed_all():
         return {'bozo': True}
 
 
-def download_set_patterns(os):
-    if settings.DOWNLOAD_SET_PATTERN:
-        with open(settings.DOWNLOAD_SET_PATTERN % os, 'rt') as f:
-            for line in f:
-                key, value = line.split("=", 1)
-                yield key.strip(), value.strip()
-
-
-def download_choices(os='win'):
-    downloads = {}
-
-    if os == 'win':
-        for key, value in download_set_patterns(os):
-            if key == 'WIN_SNAPSHOT':
-                downloads['win25'] = '{0}-py2.5.exe'.format(value)
-                downloads['win26'] = '{0}-py2.6.exe'.format(value)
-                downloads['win27'] = '{0}-py2.7.exe'.format(value)
-            elif key == 'WIN_PYTHON_SNAPSHOT':
-                downloads['winw25'] = '{0}-py2.5.exe'.format(value)
-                downloads['winw26'] = '{0}-py2.6.exe'.format(value)
-                downloads['winw27'] = '{0}-py2.7.exe'.format(value)
-            elif key == 'ADDON_BIOINFORMATICS_SNAPSHOT':
-                downloads['bio26'] = '{0}-py2.6.exe'.format(value)
-                downloads['bio27'] = '{0}-py2.7.exe'.format(value)
-            elif key == 'ADDON_TEXT_SNAPSHOT':
-                downloads['text26'] = '{0}-py2.6.exe'.format(value)
-                downloads['text27'] = '{0}-py2.7.exe'.format(value)
-            elif key == 'SOURCE_SNAPSHOT':
-                downloads['source'] = value
-    elif os == "mac":
-        for key, value in download_set_patterns(os):
-            if key == 'MAC_DAILY':
-                downloads['mac'] = value
-            if key == 'MAC_ORANGE3_DAILY':
-                downloads['bundle-orange3'] = value
+def cut_string(string, post_length):
+    if len(string) < post_length:
+        return string
     else:
-        for key, value in download_set_patterns('win'):
-            if key == 'WIN_SNAPSHOT':
-                downloads['date'] = value[-10:]
-
-    return downloads
-
-
-@register.inclusion_tag('download_windows.html')
-def download_win():
-    return download_choices('win')
+        # find fist space before limit
+        for i in range(post_length, 0, -1):
+            if string[i] == ' ':
+                break
+        return string[:i]
 
 
-@register.inclusion_tag('download_mac-os-x.html')
-def download_mac():
-    return download_choices('mac')
+@register.inclusion_tag('feed_results.html')
+def blog_feed_small():
+    return grab_feed_all()
 
 
-@register.inclusion_tag('download_source.html')
-def download_source():
-    """Source data is in 'filenames_win.set'"""
-    return download_choices('win')
+@register.inclusion_tag('feed_bar.html')
+def blog_feed_bar():
+    return grab_feed_all()
 
 
-@register.inclusion_tag('download_addons_win.html')
-def download_addons_win():
-    """Source data is in 'filenames_win.set'"""
-    return download_choices('win')
+@register.inclusion_tag('toolbox_widgets.html')
+def toolbox_widgets(widget_js):
+    return {'toolbox': widget_js}
 
 
-@register.simple_tag
-def download_link(os):
-    if os == 'windows':
-        return download_choices('win').get('winw27', '')
-    elif os == 'mac-os-x':
-        return download_choices('mac').get('mac', '')
-    elif os == 'linux':
-        return download_choices('win').get('source', '')
-    else:
-        return download_choices('date').get('date', '')
-
-
-@register.simple_tag
-def orange3_bundle_url():
-    return reverse('download') + 'files/' + download_choices('mac').get('bundle-orange3', '')
-
-
-@register.inclusion_tag('download_addons.html')
-def download_addons():
-    client = xmlrpclib.ServerProxy('http://pypi.python.org/pypi')
-    addons = []
-    for iid, package in enumerate(client.search({'keywords': 'orange'})):
-        # TODO: Possible threaded URL fetching
-        url = 'https://pypi.python.org/pypi/{0}/json'.format(package['name'])
-        r = requests.get(url)
-        jsonfile = r.json()
-        desc = jsonfile['info']['description'].split('\n')
-        # RST -> HTML conversion
-        desc = publish_parts('\n'.join(desc[3:]), writer_name='html')
-        new_json = {
-            'iid': iid + 1,
-            'name': jsonfile['info']['name'],
-            'version': jsonfile['info']['version'],
-            'description': desc['html_body'],
-            'package_url': jsonfile['info']['package_url'],
-            'download_url': jsonfile['info']['download_url'],
-            'repo_url': None,
-            'docs_url': jsonfile['info']['docs_url'],
-            'home_page': jsonfile['info']['home_page'],
-        }
-        dl_url = jsonfile['info']['download_url']
-        if "bitbucket" in dl_url and dl_url.endswith('/downloads'):
-            new_json['repo_url'] = dl_url[:-10]
-        elif "github" in dl_url and dl_url.endswith('/releases'):
-            new_json['repo_url'] = dl_url[:-9]
-        addons.append(new_json)
-    return {'addons': addons}
+@register.inclusion_tag('testimonials.html')
+def testimonials_tag(data):
+    return {'testimonials': data}
